@@ -8,7 +8,7 @@
 
 * `.dsd` バイナリログをCSVに変換
 * ISO8601タイムスタンプ（タイムゾーン付き）
-* 出力ファイルをローカル日付で分割
+* 標準出力または入力ファイル名由来のCSVへ出力
 * デフォルトタイムゾーン: JST (`+09:00`)
 * 3つの出力モード（計算値のみ/生データのみ/デバッグ）
 * `DefiSportsDisplayF.xml` の出力列と計算式に基づいた計算処理
@@ -17,12 +17,10 @@
 
 ## 出力形式
 
-生成されるファイル:
+デフォルトではCSVを標準出力へ出力します。`-o` を指定した場合は、入力ファイルと同じ場所に拡張子だけ `.csv` へ変更したファイルを生成します。
 
 ```text
-output_YYYY-MM-DD.csv              # デフォルト（計算値のみ）
-output_YYYY-MM-DD_raw.csv          # --raw フラグ（生データのみ）
-output_YYYY-MM-DD_debug.csv        # --debug フラグ（両方）
+20260426_004729.dsd  →  20260426_004729.csv
 ```
 
 ## 使用方法
@@ -30,32 +28,34 @@ output_YYYY-MM-DD_debug.csv        # --debug フラグ（両方）
 ### デフォルト（計算値のみ）
 
 ```bash
-python dsdf-converter.py input.dsd -o output
+python dsdf-converter.py input.dsd
 ```
 
-出力: `output_2026-04-26.csv` (23列)
+出力: 標準出力へCSV (23列)
 
-リポジトリルートから実行する場合:
+ファイルへ保存する場合:
 
 ```bash
-python dsdf-converter/dsdf-converter.py 20260426_004729.dsd -o output
+python dsdf-converter.py input.dsd -o
 ```
+
+出力: `input.csv` (23列)
 
 ### 生データのみ
 
 ```bash
-python dsdf-converter.py input.dsd -o output --raw
+python dsdf-converter.py input.dsd --raw
 ```
 
-出力: `output_2026-04-26_raw.csv` (21列)
+出力: 標準出力へCSV (21列)
 
 ### デバッグモード（生データ+計算値）
 
 ```bash
-python dsdf-converter.py input.dsd -o output --debug
+python dsdf-converter.py input.dsd --debug
 ```
 
-出力: `output_2026-04-26_debug.csv` (43列)
+出力: 標準出力へCSV (43列)
 
 ## 計算処理（XMLより実装）
 

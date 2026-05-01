@@ -1,8 +1,8 @@
 import argparse
 import csv
 import struct
+import sys
 import xml.etree.ElementTree as ET
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -212,44 +212,55 @@ def format_value(name, value):
     return value
 
 
-def write_calculated_csv(path, records):
-    with path.open("w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(CSV_COLUMNS)
-        for record in records:
-            calc = record["calculated"]
-            row_values = {"datetime_iso8601": record["datetime_jst"].isoformat(timespec="milliseconds"), **calc}
-            writer.writerow([format_value(name, row_values[name]) for name in CSV_COLUMNS])
+def write_calculated_csv(csvfile, records):
+    writer = csv.writer(csvfile)
+    writer.writerow(CSV_COLUMNS)
+    for record in records:
+        calc = record["calculated"]
+        row_values = {"datetime_iso8601": record["datetime_jst"].isoformat(timespec="milliseconds"), **calc}
+        writer.writerow([format_value(name, row_values[name]) for name in CSV_COLUMNS])
 
 
-def write_raw_csv(path, records):
-    with path.open("w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["datetime_iso8601", *RAW_COLUMNS])
-        for record in records:
-            raw = record["raw"]
-            writer.writerow([record["datetime_jst"].isoformat(timespec="milliseconds"), *[raw[name] for name in RAW_COLUMNS]])
+def write_raw_csv(csvfile, records):
+    writer = csv.writer(csvfile)
+    writer.writerow(["datetime_iso8601", *RAW_COLUMNS])
+    for record in records:
+        raw = record["raw"]
+        writer.writerow([record["datetime_jst"].isoformat(timespec="milliseconds"), *[raw[name] for name in RAW_COLUMNS]])
 
 
-def write_debug_csv(path, records):
-    with path.open("w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["datetime_iso8601", *RAW_COLUMNS, *CSV_COLUMNS[1:]])
-        for record in records:
-            raw = record["raw"]
-            calc = record["calculated"]
-            row_values = {"datetime_iso8601": record["datetime_jst"].isoformat(timespec="milliseconds"), **calc}
-            writer.writerow(
-                [record["datetime_jst"].isoformat(timespec="milliseconds")]
-                + [raw[name] for name in RAW_COLUMNS]
-                + [format_value(name, row_values[name]) for name in CSV_COLUMNS[1:]]
-            )
+def write_debug_csv(csvfile, records):
+    writer = csv.writer(csvfile)
+    writer.writerow(["datetime_iso8601", *RAW_COLUMNS, *CSV_COLUMNS[1:]])
+    for record in records:
+        raw = record["raw"]
+        calc = record["calculated"]
+        row_values = {"datetime_iso8601": record["datetime_jst"].isoformat(timespec="milliseconds"), **calc}
+        writer.writerow(
+            [record["datetime_jst"].isoformat(timespec="milliseconds")]
+            + [raw[name] for name in RAW_COLUMNS]
+            + [format_value(name, row_values[name]) for name in CSV_COLUMNS[1:]]
+        )
+
+
+def write_csv(csvfile, records, mode):
+    if mode == "raw":
+        write_raw_csv(csvfile, records)
+    elif mode == "debug":
+        write_debug_csv(csvfile, records)
+    else:
+        write_calculated_csv(csvfile, records)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Convert Defi Sports Display F .dsd logs to CSV.")
     parser.add_argument("input", type=Path)
-    parser.add_argument("-o", "--out-prefix", default="output")
+    parser.add_argument(
+        "-o",
+        "--output",
+        action="store_true",
+        help="write to input filename with .csv extension instead of standard output",
+    )
     parser.add_argument("--xml-profile", type=Path, help="DefiSportsDisplayF.xml path used to validate output columns")
     parser.add_argument("--raw", action="store_true", help="write raw decoded fields only")
     parser.add_argument("--debug", action="store_true", help="write raw decoded fields and calculated fields")
@@ -260,26 +271,19 @@ def main():
     if xml_path:
         missing = validate_output_columns(load_xml_outputs(xml_path))
         if missing:
-            print(f"Warning: XML output columns not emitted: {', '.join(missing)}")
+            print(f"Warning: XML output columns not emitted: {', '.join(missing)}", file=sys.stderr)
 
     data = input_path.read_bytes()
-    grouped = defaultdict(list)
-    for record in iter_records(data):
-        grouped[record["datetime_jst"].strftime("%Y-%m-%d")].append(record)
+    records = list(iter_records(data))
+    mode = "raw" if args.raw else "debug" if args.debug else "calculated"
 
-    for date_key, records in sorted(grouped.items()):
-        suffix = "_raw" if args.raw else "_debug" if args.debug else ""
-        output_path = Path(f"{args.out_prefix}_{date_key}{suffix}.csv")
-        if args.raw:
-            write_raw_csv(output_path, records)
-            mode = "raw"
-        elif args.debug:
-            write_debug_csv(output_path, records)
-            mode = "debug"
-        else:
-            write_calculated_csv(output_path, records)
-            mode = "calculated"
-        print(f"wrote {mode}: {output_path} ({len(records)} records)")
+    if args.output:
+        output_path = input_path.with_suffix(".csv")
+        with output_path.open("w", newline="", encoding="utf-8") as csvfile:
+            write_csv(csvfile, records, mode)
+        print(f"wrote {mode}: {output_path} ({len(records)} records)", file=sys.stderr)
+    else:
+        write_csv(sys.stdout, records, mode)
 
 
 if __name__ == "__main__":
